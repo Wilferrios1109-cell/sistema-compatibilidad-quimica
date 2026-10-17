@@ -22,7 +22,6 @@ public class PerfilMatcher {
         Objects.requireNonNull(perfiles, "Los perfiles son obligatorios");
         Objects.requireNonNull(criterios, "Los criterios son obligatorios");
 
-        // Sin la clase ONU no podemos restringir los candidatos.
         if (datosFDS.claseOnu().isEmpty()) {
             return ResultadoIdentificacionPerfil.noDeterminado();
         }
@@ -31,7 +30,7 @@ public class PerfilMatcher {
                 obtenerCriteriosPorPerfil(criterios);
 
         List<PerfilMatriz> candidatos = new ArrayList<>();
-        boolean hayReglaPendienteRelevante = false;
+        boolean existeCandidatoIndeterminado = false;
 
         for (PerfilMatriz perfil : perfiles) {
 
@@ -43,28 +42,42 @@ public class PerfilMatcher {
             CriteriosIdentificacionPerfil criterio =
                     criteriosPorPerfil.get(perfil.id());
 
-            // Sin criterios registrados, el perfil no se identifica.
+            // Sin criterios no podemos descartar el perfil con seguridad.
             if (criterio == null) {
-                hayReglaPendienteRelevante = true;
+                existeCandidatoIndeterminado = true;
                 continue;
             }
 
-            // No se automatiza la identificación con reglas pendientes.
-            if (criterio.estadoRegla() != EstadoReglaPerfil.VALIDADO
-                    || perfil.estado() != EstadoPerfil.VALIDADO
-                    || perfil.modoDivision() == ModoDivision.PENDIENTE) {
-                hayReglaPendienteRelevante = true;
+            EvaluacionCriterios evaluacion =
+                    evaluarCriterios(perfil, criterio, datosFDS);
+
+            // Si los criterios no coinciden con datos conocidos,
+            // este perfil no puede ser candidato.
+            if (evaluacion == EvaluacionCriterios.NO_COINCIDE) {
                 continue;
             }
 
-            if (coincideConCriterios(perfil, criterio, datosFDS)) {
-                candidatos.add(perfil);
+            // Una regla pendiente que coincide o que no puede descartarse
+            // impide una identificación automática.
+            if (perfil.estado() != EstadoPerfil.VALIDADO
+                    || perfil.modoDivision() == ModoDivision.PENDIENTE
+                    || criterio.estadoRegla() != EstadoReglaPerfil.VALIDADO) {
+
+                existeCandidatoIndeterminado = true;
+                continue;
             }
+
+            if (evaluacion == EvaluacionCriterios.INDETERMINADO) {
+                existeCandidatoIndeterminado = true;
+                continue;
+            }
+
+            candidatos.add(perfil);
         }
 
-        // Una regla pendiente de la misma clase puede ocultar un candidato
-        // alternativo. En ese caso no elegimos un perfil automáticamente.
-        if (hayReglaPendienteRelevante) {
+        // No elegimos otro perfil si existe un candidato potencial
+        // que no se puede confirmar ni descartar.
+        if (existeCandidatoIndeterminado) {
             return ResultadoIdentificacionPerfil.noDeterminado();
         }
 
@@ -80,13 +93,12 @@ public class PerfilMatcher {
                 .filter(p -> p.modoDivision() == ModoDivision.GENERAL)
                 .toList();
 
-        // Un perfil específico puede prevalecer sobre uno general,
-        // siempre que exista un único candidato específico.
+        // Un único perfil específico prevalece sobre el general.
         if (especificos.size() == 1) {
             return ResultadoIdentificacionPerfil.identificado(especificos.get(0));
         }
 
-        // Varios perfiles específicos representan una ambigüedad.
+        // No escogemos arbitrariamente entre varios perfiles específicos.
         if (especificos.size() > 1) {
             return ResultadoIdentificacionPerfil.noDeterminado();
         }
@@ -98,73 +110,127 @@ public class PerfilMatcher {
         return ResultadoIdentificacionPerfil.noDeterminado();
     }
 
-    private boolean coincideConCriterios(
+    private EvaluacionCriterios evaluarCriterios(
             PerfilMatriz perfil,
             CriteriosIdentificacionPerfil criterio,
             DatosRelevantesFDS datosFDS) {
 
-        // Si el perfil declara un número ONU concreto, debe coincidir.
-        if (perfil.numeroOnu() != null) {
-            if (datosFDS.numeroOnu().isEmpty()
-                    || !perfil.numeroOnu().equals(datosFDS.numeroOnu().get())) {
-                return false;
-            }
+        EvaluacionCriterios resultadoNumeroPerfil =
+                evaluarNumeroPerfil(perfil.numeroOnu(), datosFDS.numeroOnu());
+
+        if (resultadoNumeroPerfil == EvaluacionCriterios.NO_COINCIDE) {
+            return EvaluacionCriterios.NO_COINCIDE;
         }
 
-        return coincideNumeroOnu(criterio.numerosOnu(), datosFDS.numeroOnu())
-                && coincideDivisiones(criterio.divisionesOnu(), datosFDS.divisionesOnu())
-                && coincidePictogramas(
+        EvaluacionCriterios resultadoNumeros =
+                evaluarNumerosOnu(criterio.numerosOnu(), datosFDS.numeroOnu());
+
+        if (resultadoNumeros == EvaluacionCriterios.NO_COINCIDE) {
+            return EvaluacionCriterios.NO_COINCIDE;
+        }
+
+        EvaluacionCriterios resultadoDivisiones =
+                evaluarDivisiones(criterio.divisionesOnu(), datosFDS.divisionesOnu());
+
+        if (resultadoDivisiones == EvaluacionCriterios.NO_COINCIDE) {
+            return EvaluacionCriterios.NO_COINCIDE;
+        }
+
+        EvaluacionCriterios resultadoPictogramas =
+                evaluarPictogramas(
                         criterio.pictogramasRequeridos(),
                         datosFDS.pictogramasSGA()
                 );
+
+        if (resultadoPictogramas == EvaluacionCriterios.NO_COINCIDE) {
+            return EvaluacionCriterios.NO_COINCIDE;
+        }
+
+        if (resultadoNumeroPerfil == EvaluacionCriterios.INDETERMINADO
+                || resultadoNumeros == EvaluacionCriterios.INDETERMINADO
+                || resultadoDivisiones == EvaluacionCriterios.INDETERMINADO
+                || resultadoPictogramas == EvaluacionCriterios.INDETERMINADO) {
+            return EvaluacionCriterios.INDETERMINADO;
+        }
+
+        return EvaluacionCriterios.COINCIDE;
     }
 
-    private boolean coincideNumeroOnu(
+    private EvaluacionCriterios evaluarNumeroPerfil(
+            String numeroPerfil,
+            Optional<String> numeroFDS) {
+
+        if (numeroPerfil == null) {
+            return EvaluacionCriterios.COINCIDE;
+        }
+
+        if (numeroFDS.isEmpty()) {
+            return EvaluacionCriterios.INDETERMINADO;
+        }
+
+        return numeroPerfil.equals(numeroFDS.get())
+                ? EvaluacionCriterios.COINCIDE
+                : EvaluacionCriterios.NO_COINCIDE;
+    }
+
+    private EvaluacionCriterios evaluarNumerosOnu(
             Optional<Set<String>> numerosPermitidos,
             Optional<String> numeroFDS) {
 
         if (numerosPermitidos.isEmpty()) {
-            return true;
+            return EvaluacionCriterios.COINCIDE;
         }
 
-        if (numerosPermitidos.get().isEmpty() || numeroFDS.isEmpty()) {
-            return false;
+        if (numerosPermitidos.get().isEmpty()) {
+            return EvaluacionCriterios.NO_COINCIDE;
         }
 
-        return numerosPermitidos.get().contains(numeroFDS.get());
+        if (numeroFDS.isEmpty()) {
+            return EvaluacionCriterios.INDETERMINADO;
+        }
+
+        return numerosPermitidos.get().contains(numeroFDS.get())
+                ? EvaluacionCriterios.COINCIDE
+                : EvaluacionCriterios.NO_COINCIDE;
     }
 
-    private boolean coincideDivisiones(
+    private EvaluacionCriterios evaluarDivisiones(
             Optional<Set<String>> divisionesPermitidas,
             Optional<Set<String>> divisionesFDS) {
 
         if (divisionesPermitidas.isEmpty()) {
-            return true;
+            return EvaluacionCriterios.COINCIDE;
         }
 
-        if (divisionesPermitidas.get().isEmpty() || divisionesFDS.isEmpty()) {
-            return false;
+        if (divisionesPermitidas.get().isEmpty()) {
+            return EvaluacionCriterios.NO_COINCIDE;
         }
 
-        // Todas las divisiones de la FDS deben estar contempladas
-        // por el criterio del perfil.
-        return divisionesPermitidas.get().containsAll(divisionesFDS.get());
+        if (divisionesFDS.isEmpty()) {
+            return EvaluacionCriterios.INDETERMINADO;
+        }
+
+        return divisionesPermitidas.get().containsAll(divisionesFDS.get())
+                ? EvaluacionCriterios.COINCIDE
+                : EvaluacionCriterios.NO_COINCIDE;
     }
 
-    private boolean coincidePictogramas(
+    private EvaluacionCriterios evaluarPictogramas(
             Optional<Set<CodigoPictogramaSGA>> pictogramasRequeridos,
             Optional<Set<CodigoPictogramaSGA>> pictogramasFDS) {
 
-        if (pictogramasRequeridos.isEmpty()) {
-            return true;
+        if (pictogramasRequeridos.isEmpty()
+                || pictogramasRequeridos.get().isEmpty()) {
+            return EvaluacionCriterios.COINCIDE;
         }
 
-        if (pictogramasRequeridos.get().isEmpty() || pictogramasFDS.isEmpty()) {
-            return false;
+        if (pictogramasFDS.isEmpty()) {
+            return EvaluacionCriterios.INDETERMINADO;
         }
 
-        // Todos los pictogramas requeridos deben estar presentes.
-        return pictogramasFDS.get().containsAll(pictogramasRequeridos.get());
+        return pictogramasFDS.get().containsAll(pictogramasRequeridos.get())
+                ? EvaluacionCriterios.COINCIDE
+                : EvaluacionCriterios.NO_COINCIDE;
     }
 
     private Map<UUID, CriteriosIdentificacionPerfil> obtenerCriteriosPorPerfil(
@@ -187,5 +253,11 @@ public class PerfilMatcher {
         }
 
         return resultado;
+    }
+
+    private enum EvaluacionCriterios {
+        COINCIDE,
+        NO_COINCIDE,
+        INDETERMINADO
     }
 }
