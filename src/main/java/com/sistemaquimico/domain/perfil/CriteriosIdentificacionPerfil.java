@@ -1,30 +1,37 @@
+
 package com.sistemaquimico.domain.perfil;
 
 import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 
 public record CriteriosIdentificacionPerfil(
         UUID idPerfil,
-        Optional<Set<String>> numerosOnu,
-        Optional<Set<String>> divisionesOnu,
-        Optional<Set<CodigoPictogramaSGA>> pictogramasRequeridos,
+        CriterioConjunto<String> numerosOnu,
+        CriterioConjunto<String> divisionesOnu,
+        CriterioConjunto<CodigoPictogramaSGA> pictogramasRequeridos,
         EstadoReglaPerfil estadoRegla
 ) {
+
     public CriteriosIdentificacionPerfil {
-        Objects.requireNonNull(idPerfil, "El perfil asociado es obligatorio");
-        Objects.requireNonNull(numerosOnu, "Los números ONU son obligatorios como campo");
-        Objects.requireNonNull(divisionesOnu, "Las divisiones ONU son obligatorias como campo");
+        Objects.requireNonNull(
+                idPerfil,
+                "El perfil asociado es obligatorio"
+        );
+        Objects.requireNonNull(
+                numerosOnu,
+                "El criterio de números ONU es obligatorio"
+        );
+        Objects.requireNonNull(
+                divisionesOnu,
+                "El criterio de divisiones ONU es obligatorio"
+        );
         Objects.requireNonNull(
                 pictogramasRequeridos,
-                "Los pictogramas son obligatorios como campo"
+                "El criterio de pictogramas es obligatorio"
         );
-        Objects.requireNonNull(estadoRegla, "El estado de la regla es obligatorio");
-
-        numerosOnu = numerosOnu.map(Set::copyOf);
-        divisionesOnu = divisionesOnu.map(Set::copyOf);
-        pictogramasRequeridos = pictogramasRequeridos.map(Set::copyOf);
+        Objects.requireNonNull(
+                estadoRegla,
+                "El estado de la regla es obligatorio"
+        );
     }
 }
-
