@@ -1,3 +1,4 @@
+
 package com.sistemaquimico.domain.perfil;
 
 import org.junit.jupiter.api.Test;
@@ -13,14 +14,14 @@ class DatosRelevantesFDSTest {
     void debeAceptarClasificacionConocida() {
         DatosRelevantesFDS datos = new DatosRelevantesFDS(
                 Optional.of(3),
-                Optional.empty(),
+                Optional.of("2.1"),
                 Optional.of("1203"),
                 Optional.of(Set.of(CodigoPictogramaSGA.GHS02))
         );
 
         assertEquals(Optional.of(3), datos.claseOnu());
+        assertEquals(Optional.of("2.1"), datos.divisionPrincipalOnu());
         assertEquals(Optional.of("1203"), datos.numeroOnu());
-        assertTrue(datos.divisionesOnu().isEmpty());
         assertTrue(datos.pictogramasSGA().orElseThrow()
                 .contains(CodigoPictogramaSGA.GHS02));
     }
@@ -35,7 +36,7 @@ class DatosRelevantesFDSTest {
         );
 
         assertTrue(datos.claseOnu().isEmpty());
-        assertTrue(datos.divisionesOnu().isEmpty());
+        assertTrue(datos.divisionPrincipalOnu().isEmpty());
         assertTrue(datos.numeroOnu().isEmpty());
         assertTrue(datos.pictogramasSGA().isEmpty());
     }
@@ -53,14 +54,14 @@ class DatosRelevantesFDSTest {
     }
 
     @Test
-    void noDebeAceptarUnaDivisionVaciaSiSeDeclaraConocida() {
-        assertThrows(IllegalArgumentException.class, () ->
-                new DatosRelevantesFDS(
-                        Optional.of(2),
-                        Optional.of(Set.of()),
-                        Optional.empty(),
-                        Optional.empty()
-                )
+    void debeTratarUnaDivisionEnBlancoComoDesconocida() {
+        DatosRelevantesFDS datos = new DatosRelevantesFDS(
+                Optional.of(2),
+                Optional.of("   "),
+                Optional.empty(),
+                Optional.empty()
         );
+
+        assertTrue(datos.divisionPrincipalOnu().isEmpty());
     }
 }

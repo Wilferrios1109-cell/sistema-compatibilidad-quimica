@@ -1,3 +1,4 @@
+
 package com.sistemaquimico.domain.perfil;
 
 import java.util.ArrayList;
@@ -42,7 +43,6 @@ public class PerfilMatcher {
             CriteriosIdentificacionPerfil criterio =
                     criteriosPorPerfil.get(perfil.id());
 
-            // Sin criterios no podemos descartar el perfil con seguridad.
             if (criterio == null) {
                 existeCandidatoIndeterminado = true;
                 continue;
@@ -51,18 +51,13 @@ public class PerfilMatcher {
             EvaluacionCriterios evaluacion =
                     evaluarCriterios(perfil, criterio, datosFDS);
 
-            // Si los criterios no coinciden con datos conocidos,
-            // este perfil no puede ser candidato.
             if (evaluacion == EvaluacionCriterios.NO_COINCIDE) {
                 continue;
             }
 
-            // Una regla pendiente que coincide o que no puede descartarse
-            // impide una identificación automática.
             if (perfil.estado() != EstadoPerfil.VALIDADO
                     || perfil.modoDivision() == ModoDivision.PENDIENTE
                     || criterio.estadoRegla() != EstadoReglaPerfil.VALIDADO) {
-
                 existeCandidatoIndeterminado = true;
                 continue;
             }
@@ -75,8 +70,6 @@ public class PerfilMatcher {
             candidatos.add(perfil);
         }
 
-        // No elegimos otro perfil si existe un candidato potencial
-        // que no se puede confirmar ni descartar.
         if (existeCandidatoIndeterminado) {
             return ResultadoIdentificacionPerfil.noDeterminado();
         }
@@ -93,12 +86,10 @@ public class PerfilMatcher {
                 .filter(p -> p.modoDivision() == ModoDivision.GENERAL)
                 .toList();
 
-        // Un único perfil específico prevalece sobre el general.
         if (especificos.size() == 1) {
             return ResultadoIdentificacionPerfil.identificado(especificos.get(0));
         }
 
-        // No escogemos arbitrariamente entre varios perfiles específicos.
         if (especificos.size() > 1) {
             return ResultadoIdentificacionPerfil.noDeterminado();
         }
@@ -115,41 +106,44 @@ public class PerfilMatcher {
             CriteriosIdentificacionPerfil criterio,
             DatosRelevantesFDS datosFDS) {
 
-        EvaluacionCriterios resultadoNumeroPerfil =
+        EvaluacionCriterios numeroPerfil =
                 evaluarNumeroPerfil(perfil.numeroOnu(), datosFDS.numeroOnu());
 
-        if (resultadoNumeroPerfil == EvaluacionCriterios.NO_COINCIDE) {
-            return EvaluacionCriterios.NO_COINCIDE;
+        if (numeroPerfil == EvaluacionCriterios.NO_COINCIDE) {
+            return numeroPerfil;
         }
 
-        EvaluacionCriterios resultadoNumeros =
+        EvaluacionCriterios numeros =
                 evaluarNumerosOnu(criterio.numerosOnu(), datosFDS.numeroOnu());
 
-        if (resultadoNumeros == EvaluacionCriterios.NO_COINCIDE) {
-            return EvaluacionCriterios.NO_COINCIDE;
+        if (numeros == EvaluacionCriterios.NO_COINCIDE) {
+            return numeros;
         }
 
-        EvaluacionCriterios resultadoDivisiones =
-                evaluarDivisiones(criterio.divisionesOnu(), datosFDS.divisionesOnu());
+        EvaluacionCriterios divisiones =
+                evaluarDivisiones(
+                        criterio.divisionesOnu(),
+                        datosFDS.divisionPrincipalOnu()
+                );
 
-        if (resultadoDivisiones == EvaluacionCriterios.NO_COINCIDE) {
-            return EvaluacionCriterios.NO_COINCIDE;
+        if (divisiones == EvaluacionCriterios.NO_COINCIDE) {
+            return divisiones;
         }
 
-        EvaluacionCriterios resultadoPictogramas =
+        EvaluacionCriterios pictogramas =
                 evaluarPictogramas(
                         criterio.pictogramasRequeridos(),
                         datosFDS.pictogramasSGA()
                 );
 
-        if (resultadoPictogramas == EvaluacionCriterios.NO_COINCIDE) {
-            return EvaluacionCriterios.NO_COINCIDE;
+        if (pictogramas == EvaluacionCriterios.NO_COINCIDE) {
+            return pictogramas;
         }
 
-        if (resultadoNumeroPerfil == EvaluacionCriterios.INDETERMINADO
-                || resultadoNumeros == EvaluacionCriterios.INDETERMINADO
-                || resultadoDivisiones == EvaluacionCriterios.INDETERMINADO
-                || resultadoPictogramas == EvaluacionCriterios.INDETERMINADO) {
+        if (numeroPerfil == EvaluacionCriterios.INDETERMINADO
+                || numeros == EvaluacionCriterios.INDETERMINADO
+                || divisiones == EvaluacionCriterios.INDETERMINADO
+                || pictogramas == EvaluacionCriterios.INDETERMINADO) {
             return EvaluacionCriterios.INDETERMINADO;
         }
 
@@ -174,53 +168,44 @@ public class PerfilMatcher {
     }
 
     private EvaluacionCriterios evaluarNumerosOnu(
-            Optional<Set<String>> numerosPermitidos,
+            CriterioConjunto<String> criterio,
             Optional<String> numeroFDS) {
 
-        if (numerosPermitidos.isEmpty()) {
+        if (criterio.aplicabilidad() == AplicabilidadCriterio.NO_APLICA) {
             return EvaluacionCriterios.COINCIDE;
-        }
-
-        if (numerosPermitidos.get().isEmpty()) {
-            return EvaluacionCriterios.NO_COINCIDE;
         }
 
         if (numeroFDS.isEmpty()) {
             return EvaluacionCriterios.INDETERMINADO;
         }
 
-        return numerosPermitidos.get().contains(numeroFDS.get())
+        return criterio.valores().contains(numeroFDS.get())
                 ? EvaluacionCriterios.COINCIDE
                 : EvaluacionCriterios.NO_COINCIDE;
     }
 
     private EvaluacionCriterios evaluarDivisiones(
-            Optional<Set<String>> divisionesPermitidas,
-            Optional<Set<String>> divisionesFDS) {
+            CriterioConjunto<String> criterio,
+            Optional<String> divisionPrincipalFDS) {
 
-        if (divisionesPermitidas.isEmpty()) {
+        if (criterio.aplicabilidad() == AplicabilidadCriterio.NO_APLICA) {
             return EvaluacionCriterios.COINCIDE;
         }
 
-        if (divisionesPermitidas.get().isEmpty()) {
-            return EvaluacionCriterios.NO_COINCIDE;
-        }
-
-        if (divisionesFDS.isEmpty()) {
+        if (divisionPrincipalFDS.isEmpty()) {
             return EvaluacionCriterios.INDETERMINADO;
         }
 
-        return divisionesPermitidas.get().containsAll(divisionesFDS.get())
+        return criterio.valores().contains(divisionPrincipalFDS.get())
                 ? EvaluacionCriterios.COINCIDE
                 : EvaluacionCriterios.NO_COINCIDE;
     }
 
     private EvaluacionCriterios evaluarPictogramas(
-            Optional<Set<CodigoPictogramaSGA>> pictogramasRequeridos,
+            CriterioConjunto<CodigoPictogramaSGA> criterio,
             Optional<Set<CodigoPictogramaSGA>> pictogramasFDS) {
 
-        if (pictogramasRequeridos.isEmpty()
-                || pictogramasRequeridos.get().isEmpty()) {
+        if (criterio.aplicabilidad() == AplicabilidadCriterio.NO_APLICA) {
             return EvaluacionCriterios.COINCIDE;
         }
 
@@ -228,7 +213,7 @@ public class PerfilMatcher {
             return EvaluacionCriterios.INDETERMINADO;
         }
 
-        return pictogramasFDS.get().containsAll(pictogramasRequeridos.get())
+        return pictogramasFDS.get().containsAll(criterio.valores())
                 ? EvaluacionCriterios.COINCIDE
                 : EvaluacionCriterios.NO_COINCIDE;
     }

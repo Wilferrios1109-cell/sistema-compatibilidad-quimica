@@ -1,14 +1,15 @@
+
 package com.sistemaquimico.domain.perfil;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
-import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PerfilMatcherTest {
 
@@ -37,9 +38,9 @@ class PerfilMatcherTest {
 
     private CriteriosIdentificacionPerfil crearCriterios(
             UUID idPerfil,
-            Optional<Set<String>> numerosOnu,
-            Optional<Set<String>> divisionesOnu,
-            Optional<Set<CodigoPictogramaSGA>> pictogramas,
+            CriterioConjunto<String> numerosOnu,
+            CriterioConjunto<String> divisionesOnu,
+            CriterioConjunto<CodigoPictogramaSGA> pictogramas,
             EstadoReglaPerfil estado) {
 
         return new CriteriosIdentificacionPerfil(
@@ -53,55 +54,77 @@ class PerfilMatcherTest {
 
     private DatosRelevantesFDS crearDatosFDS(
             Optional<Integer> claseOnu,
-            Optional<Set<String>> divisionesOnu,
+            Optional<String> divisionPrincipalOnu,
             Optional<String> numeroOnu,
             Optional<Set<CodigoPictogramaSGA>> pictogramas) {
 
         return new DatosRelevantesFDS(
                 claseOnu,
-                divisionesOnu,
+                divisionPrincipalOnu,
                 numeroOnu,
                 pictogramas
         );
     }
 
-   
     private DatosRelevantesFDS datosClaseDos(
             Set<String> divisiones,
             Set<CodigoPictogramaSGA> pictogramas) {
 
-            Optional<Set<String>> divisionesFDS = divisiones.isEmpty()
-            ? Optional.empty()
-            : Optional.of(divisiones);
+        if (divisiones.size() > 1) {
+            throw new IllegalArgumentException(
+                    "La FDS debe tener una sola división principal"
+            );
+        }
 
-            Optional<Set<CodigoPictogramaSGA>> pictogramasFDS =
-            pictogramas.isEmpty()
-                    ? Optional.empty()
-                    : Optional.of(pictogramas);
+        Optional<String> divisionPrincipal = divisiones.stream().findFirst();
 
-    return crearDatosFDS(
-            Optional.of(2),
-            divisionesFDS,
-            Optional.empty(),
-            pictogramasFDS
-    );
-}
+        Optional<Set<CodigoPictogramaSGA>> pictogramasFDS =
+                pictogramas.isEmpty()
+                        ? Optional.empty()
+                        : Optional.of(pictogramas);
 
+        return crearDatosFDS(
+                Optional.of(2),
+                divisionPrincipal,
+                Optional.empty(),
+                pictogramasFDS
+        );
+    }
+
+    private CriterioConjunto<String> sinRestriccionTexto() {
+        return CriterioConjunto.noAplica();
+    }
+
+    private CriterioConjunto<String> divisionesPermitidas(
+            String... divisiones) {
+        return CriterioConjunto.aplica(Set.of(divisiones));
+    }
+
+    private CriterioConjunto<String> numerosPermitidos(String... numeros) {
+        return CriterioConjunto.aplica(Set.of(numeros));
+    }
+
+    private CriterioConjunto<CodigoPictogramaSGA> sinRestriccionPictogramas() {
+        return CriterioConjunto.noAplica();
+    }
+
+    private CriterioConjunto<CodigoPictogramaSGA> pictogramasRequeridos(
+            CodigoPictogramaSGA... pictogramas) {
+        return CriterioConjunto.aplica(Set.of(pictogramas));
+    }
 
     @Test
     void debeIdentificarUnPerfilGeneralUnico() {
         PerfilMatriz perfil = crearPerfil(
-                UUID.randomUUID(),
-                "C-GENERAL",
-                ModoDivision.GENERAL,
-                EstadoPerfil.VALIDADO
+                UUID.randomUUID(), "C-GENERAL",
+                ModoDivision.GENERAL, EstadoPerfil.VALIDADO
         );
 
         CriteriosIdentificacionPerfil criterios = crearCriterios(
                 perfil.id(),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.empty(),
+                sinRestriccionTexto(),
+                sinRestriccionTexto(),
+                sinRestriccionPictogramas(),
                 EstadoReglaPerfil.VALIDADO
         );
 
@@ -119,32 +142,28 @@ class PerfilMatcherTest {
     @Test
     void debePreferirElPerfilEspecificoSobreElGeneral() {
         PerfilMatriz general = crearPerfil(
-                UUID.randomUUID(),
-                "C-GENERAL",
-                ModoDivision.GENERAL,
-                EstadoPerfil.VALIDADO
+                UUID.randomUUID(), "C-GENERAL",
+                ModoDivision.GENERAL, EstadoPerfil.VALIDADO
         );
 
         PerfilMatriz especifico = crearPerfil(
-                UUID.randomUUID(),
-                "C-ESPECIFICO",
-                ModoDivision.LISTA_ESPECIFICA,
-                EstadoPerfil.VALIDADO
+                UUID.randomUUID(), "C-ESPECIFICO",
+                ModoDivision.LISTA_ESPECIFICA, EstadoPerfil.VALIDADO
         );
 
         CriteriosIdentificacionPerfil criteriosGeneral = crearCriterios(
                 general.id(),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.empty(),
+                sinRestriccionTexto(),
+                sinRestriccionTexto(),
+                sinRestriccionPictogramas(),
                 EstadoReglaPerfil.VALIDADO
         );
 
         CriteriosIdentificacionPerfil criteriosEspecificos = crearCriterios(
                 especifico.id(),
-                Optional.empty(),
-                Optional.of(Set.of("2.2")),
-                Optional.empty(),
+                sinRestriccionTexto(),
+                divisionesPermitidas("2.2"),
+                sinRestriccionPictogramas(),
                 EstadoReglaPerfil.VALIDADO
         );
 
@@ -162,32 +181,28 @@ class PerfilMatcherTest {
     @Test
     void noDebeElegirEntrePerfilesEspecificosIncomparables() {
         PerfilMatriz perfilA = crearPerfil(
-                UUID.randomUUID(),
-                "C-A",
-                ModoDivision.LISTA_ESPECIFICA,
-                EstadoPerfil.VALIDADO
+                UUID.randomUUID(), "C-A",
+                ModoDivision.LISTA_ESPECIFICA, EstadoPerfil.VALIDADO
         );
 
         PerfilMatriz perfilB = crearPerfil(
-                UUID.randomUUID(),
-                "C-B",
-                ModoDivision.LISTA_ESPECIFICA,
-                EstadoPerfil.VALIDADO
+                UUID.randomUUID(), "C-B",
+                ModoDivision.LISTA_ESPECIFICA, EstadoPerfil.VALIDADO
         );
 
         CriteriosIdentificacionPerfil criteriosA = crearCriterios(
                 perfilA.id(),
-                Optional.empty(),
-                Optional.of(Set.of("2.1", "2.2")),
-                Optional.empty(),
+                sinRestriccionTexto(),
+                divisionesPermitidas("2.1", "2.2"),
+                sinRestriccionPictogramas(),
                 EstadoReglaPerfil.VALIDADO
         );
 
         CriteriosIdentificacionPerfil criteriosB = crearCriterios(
                 perfilB.id(),
-                Optional.empty(),
-                Optional.of(Set.of("2.2", "2.3")),
-                Optional.empty(),
+                sinRestriccionTexto(),
+                divisionesPermitidas("2.2", "2.3"),
+                sinRestriccionPictogramas(),
                 EstadoReglaPerfil.VALIDADO
         );
 
@@ -208,17 +223,15 @@ class PerfilMatcherTest {
     @Test
     void noDebeIdentificarUnPerfilPendienteDeValidacion() {
         PerfilMatriz perfil = crearPerfil(
-                UUID.randomUUID(),
-                "C-PENDIENTE",
-                ModoDivision.GENERAL,
-                EstadoPerfil.PENDIENTE
+                UUID.randomUUID(), "C-PENDIENTE",
+                ModoDivision.GENERAL, EstadoPerfil.PENDIENTE
         );
 
         CriteriosIdentificacionPerfil criterios = crearCriterios(
                 perfil.id(),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.empty(),
+                sinRestriccionTexto(),
+                sinRestriccionTexto(),
+                sinRestriccionPictogramas(),
                 EstadoReglaPerfil.VALIDADO
         );
 
@@ -260,17 +273,15 @@ class PerfilMatcherTest {
         );
 
         PerfilMatriz perfil = crearPerfil(
-                UUID.randomUUID(),
-                "C-GENERAL",
-                ModoDivision.GENERAL,
-                EstadoPerfil.VALIDADO
+                UUID.randomUUID(), "C-GENERAL",
+                ModoDivision.GENERAL, EstadoPerfil.VALIDADO
         );
 
         CriteriosIdentificacionPerfil criterios = crearCriterios(
                 perfil.id(),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.empty(),
+                sinRestriccionTexto(),
+                sinRestriccionTexto(),
+                sinRestriccionPictogramas(),
                 EstadoReglaPerfil.VALIDADO
         );
 
@@ -290,17 +301,15 @@ class PerfilMatcherTest {
     @Test
     void noDebeIdentificarSiLaReglaEstaPendiente() {
         PerfilMatriz perfil = crearPerfil(
-                UUID.randomUUID(),
-                "C-REGLA-PENDIENTE",
-                ModoDivision.GENERAL,
-                EstadoPerfil.VALIDADO
+                UUID.randomUUID(), "C-REGLA-PENDIENTE",
+                ModoDivision.GENERAL, EstadoPerfil.VALIDADO
         );
 
         CriteriosIdentificacionPerfil criterios = crearCriterios(
                 perfil.id(),
-                Optional.empty(),
-                Optional.empty(),
-                Optional.empty(),
+                sinRestriccionTexto(),
+                sinRestriccionTexto(),
+                sinRestriccionPictogramas(),
                 EstadoReglaPerfil.PENDIENTE
         );
 
@@ -320,17 +329,15 @@ class PerfilMatcherTest {
     @Test
     void noDebeIdentificarSiFaltaUnDatoRequerido() {
         PerfilMatriz perfil = crearPerfil(
-                UUID.randomUUID(),
-                "C-DIVISION-22",
-                ModoDivision.LISTA_ESPECIFICA,
-                EstadoPerfil.VALIDADO
+                UUID.randomUUID(), "C-DIVISION-22",
+                ModoDivision.LISTA_ESPECIFICA, EstadoPerfil.VALIDADO
         );
 
         CriteriosIdentificacionPerfil criterios = crearCriterios(
                 perfil.id(),
-                Optional.empty(),
-                Optional.of(Set.of("2.2")),
-                Optional.empty(),
+                sinRestriccionTexto(),
+                divisionesPermitidas("2.2"),
+                sinRestriccionPictogramas(),
                 EstadoReglaPerfil.VALIDADO
         );
 
@@ -354,204 +361,227 @@ class PerfilMatcherTest {
         );
     }
 
-    
     @Test
     void unaReglaEspecificaPendienteQueNoCoincideNoDebeBloquearElPerfilGeneral() {
         PerfilMatriz general = crearPerfil(
-            UUID.randomUUID(),
-            "C-GENERAL",
-            ModoDivision.GENERAL,
-            EstadoPerfil.VALIDADO
-    );
+                UUID.randomUUID(), "C-GENERAL",
+                ModoDivision.GENERAL, EstadoPerfil.VALIDADO
+        );
 
-    PerfilMatriz especifico = crearPerfil(
-            UUID.randomUUID(),
-            "C-ESPECIFICO",
-            ModoDivision.LISTA_ESPECIFICA,
-            EstadoPerfil.VALIDADO
-    );
+        PerfilMatriz especifico = crearPerfil(
+                UUID.randomUUID(), "C-ESPECIFICO",
+                ModoDivision.LISTA_ESPECIFICA, EstadoPerfil.VALIDADO
+        );
 
-    CriteriosIdentificacionPerfil criteriosGeneral = crearCriterios(
-            general.id(),
-            Optional.empty(),
-            Optional.empty(),
-            Optional.empty(),
-            EstadoReglaPerfil.VALIDADO
-    );
+        CriteriosIdentificacionPerfil criteriosGeneral = crearCriterios(
+                general.id(),
+                sinRestriccionTexto(),
+                sinRestriccionTexto(),
+                sinRestriccionPictogramas(),
+                EstadoReglaPerfil.VALIDADO
+        );
 
-    CriteriosIdentificacionPerfil criteriosEspecificos = crearCriterios(
-            especifico.id(),
-            Optional.empty(),
-            Optional.of(Set.of("2.1")),
-            Optional.empty(),
-            EstadoReglaPerfil.PENDIENTE
-    );
+        CriteriosIdentificacionPerfil criteriosEspecificos = crearCriterios(
+                especifico.id(),
+                sinRestriccionTexto(),
+                divisionesPermitidas("2.1"),
+                sinRestriccionPictogramas(),
+                EstadoReglaPerfil.PENDIENTE
+        );
 
-    ResultadoIdentificacionPerfil resultado = matcher.identificar(
-            TipoPerfil.COLUMNA,
-            datosClaseDos(Set.of("2.2"), Set.of()),
-            List.of(general, especifico),
-            List.of(criteriosGeneral, criteriosEspecificos)
-    );
+        ResultadoIdentificacionPerfil resultado = matcher.identificar(
+                TipoPerfil.COLUMNA,
+                datosClaseDos(Set.of("2.2"), Set.of()),
+                List.of(general, especifico),
+                List.of(criteriosGeneral, criteriosEspecificos)
+        );
 
-    assertEquals(EstadoIdentificacionPerfil.IDENTIFICADO, resultado.estado());
-    assertEquals(general, resultado.perfil().orElseThrow());
-}
+        assertEquals(
+                EstadoIdentificacionPerfil.IDENTIFICADO,
+                resultado.estado()
+        );
+        assertEquals(general, resultado.perfil().orElseThrow());
+    }
 
     @Test
     void unaReglaEspecificaPendienteQueCoincideDebeImpedirLaIdentificacionAutomatica() {
-    PerfilMatriz general = crearPerfil(
-            UUID.randomUUID(),
-            "C-GENERAL",
-            ModoDivision.GENERAL,
-            EstadoPerfil.VALIDADO
-    );
+        PerfilMatriz general = crearPerfil(
+                UUID.randomUUID(), "C-GENERAL",
+                ModoDivision.GENERAL, EstadoPerfil.VALIDADO
+        );
 
-    PerfilMatriz especifico = crearPerfil(
-            UUID.randomUUID(),
-            "C-ESPECIFICO",
-            ModoDivision.LISTA_ESPECIFICA,
-            EstadoPerfil.VALIDADO
-    );
+        PerfilMatriz especifico = crearPerfil(
+                UUID.randomUUID(), "C-ESPECIFICO",
+                ModoDivision.LISTA_ESPECIFICA, EstadoPerfil.VALIDADO
+        );
 
-    CriteriosIdentificacionPerfil criteriosGeneral = crearCriterios(
-            general.id(),
-            Optional.empty(),
-            Optional.empty(),
-            Optional.empty(),
-            EstadoReglaPerfil.VALIDADO
-    );
+        CriteriosIdentificacionPerfil criteriosGeneral = crearCriterios(
+                general.id(),
+                sinRestriccionTexto(),
+                sinRestriccionTexto(),
+                sinRestriccionPictogramas(),
+                EstadoReglaPerfil.VALIDADO
+        );
 
-    CriteriosIdentificacionPerfil criteriosEspecificos = crearCriterios(
-            especifico.id(),
-            Optional.empty(),
-            Optional.of(Set.of("2.2")),
-            Optional.empty(),
-            EstadoReglaPerfil.PENDIENTE
-    );
+        CriteriosIdentificacionPerfil criteriosEspecificos = crearCriterios(
+                especifico.id(),
+                sinRestriccionTexto(),
+                divisionesPermitidas("2.2"),
+                sinRestriccionPictogramas(),
+                EstadoReglaPerfil.PENDIENTE
+        );
 
-    ResultadoIdentificacionPerfil resultado = matcher.identificar(
-            TipoPerfil.COLUMNA,
-            datosClaseDos(Set.of("2.2"), Set.of()),
-            List.of(general, especifico),
-            List.of(criteriosGeneral, criteriosEspecificos)
-    );
+        ResultadoIdentificacionPerfil resultado = matcher.identificar(
+                TipoPerfil.COLUMNA,
+                datosClaseDos(Set.of("2.2"), Set.of()),
+                List.of(general, especifico),
+                List.of(criteriosGeneral, criteriosEspecificos)
+        );
 
-    assertEquals(
-            EstadoIdentificacionPerfil.NO_DETERMINADO,
-            resultado.estado()
-    );
-}
+        assertEquals(
+                EstadoIdentificacionPerfil.NO_DETERMINADO,
+                resultado.estado()
+        );
+    }
 
     @Test
     void noDebeIdentificarPerfilEspecificoSiSeDesconoceLaDivision() {
-    PerfilMatriz especifico = crearPerfil(
-            UUID.randomUUID(),
-            "C-ESPECIFICO",
-            ModoDivision.LISTA_ESPECIFICA,
-            EstadoPerfil.VALIDADO
-    );
+        PerfilMatriz especifico = crearPerfil(
+                UUID.randomUUID(), "C-ESPECIFICO",
+                ModoDivision.LISTA_ESPECIFICA, EstadoPerfil.VALIDADO
+        );
 
-    CriteriosIdentificacionPerfil criterios = crearCriterios(
-            especifico.id(),
-            Optional.empty(),
-            Optional.of(Set.of("2.2")),
-            Optional.empty(),
-            EstadoReglaPerfil.VALIDADO
-    );
+        CriteriosIdentificacionPerfil criterios = crearCriterios(
+                especifico.id(),
+                sinRestriccionTexto(),
+                divisionesPermitidas("2.2"),
+                sinRestriccionPictogramas(),
+                EstadoReglaPerfil.VALIDADO
+        );
 
-    DatosRelevantesFDS datos = crearDatosFDS(
-            Optional.of(2),
-            Optional.empty(),
-            Optional.empty(),
-            Optional.empty()
-    );
+        DatosRelevantesFDS datos = crearDatosFDS(
+                Optional.of(2),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty()
+        );
 
-    ResultadoIdentificacionPerfil resultado = matcher.identificar(
-            TipoPerfil.COLUMNA,
-            datos,
-            List.of(especifico),
-            List.of(criterios)
-    );
+        ResultadoIdentificacionPerfil resultado = matcher.identificar(
+                TipoPerfil.COLUMNA,
+                datos,
+                List.of(especifico),
+                List.of(criterios)
+        );
 
-    assertEquals(
-            EstadoIdentificacionPerfil.NO_DETERMINADO,
-            resultado.estado()
-    );
-}
+        assertEquals(
+                EstadoIdentificacionPerfil.NO_DETERMINADO,
+                resultado.estado()
+        );
+    }
 
     @Test
     void noDebeIdentificarPerfilSiElNumeroOnuNoCoincide() {
-    PerfilMatriz general = crearPerfil(
-            UUID.randomUUID(),
-            "C-GENERAL",
-            ModoDivision.GENERAL,
-            EstadoPerfil.VALIDADO
-    );
+        PerfilMatriz general = crearPerfil(
+                UUID.randomUUID(), "C-GENERAL",
+                ModoDivision.GENERAL, EstadoPerfil.VALIDADO
+        );
 
-    CriteriosIdentificacionPerfil criterios = crearCriterios(
-            general.id(),
-            Optional.of(Set.of("1000")),
-            Optional.empty(),
-            Optional.empty(),
-            EstadoReglaPerfil.VALIDADO
-    );
+        CriteriosIdentificacionPerfil criterios = crearCriterios(
+                general.id(),
+                numerosPermitidos("1000"),
+                sinRestriccionTexto(),
+                sinRestriccionPictogramas(),
+                EstadoReglaPerfil.VALIDADO
+        );
 
-    DatosRelevantesFDS datos = crearDatosFDS(
-            Optional.of(2),
-            Optional.empty(),
-            Optional.of("2000"),
-            Optional.empty()
-    );
+        DatosRelevantesFDS datos = crearDatosFDS(
+                Optional.of(2),
+                Optional.empty(),
+                Optional.of("2000"),
+                Optional.empty()
+        );
 
-    ResultadoIdentificacionPerfil resultado = matcher.identificar(
-            TipoPerfil.COLUMNA,
-            datos,
-            List.of(general),
-            List.of(criterios)
-    );
+        ResultadoIdentificacionPerfil resultado = matcher.identificar(
+                TipoPerfil.COLUMNA,
+                datos,
+                List.of(general),
+                List.of(criterios)
+        );
 
-    assertEquals(
-            EstadoIdentificacionPerfil.NO_DETERMINADO,
-            resultado.estado()
-    );
-}
+        assertEquals(
+                EstadoIdentificacionPerfil.NO_DETERMINADO,
+                resultado.estado()
+        );
+    }
 
     @Test
     void noDebeIdentificarPerfilSiFaltaUnPictogramaRequerido() {
-    PerfilMatriz general = crearPerfil(
-            UUID.randomUUID(),
-            "C-GENERAL",
-            ModoDivision.GENERAL,
-            EstadoPerfil.VALIDADO
-    );
+        PerfilMatriz general = crearPerfil(
+                UUID.randomUUID(), "C-GENERAL",
+                ModoDivision.GENERAL, EstadoPerfil.VALIDADO
+        );
 
-    CriteriosIdentificacionPerfil criterios = crearCriterios(
-            general.id(),
-            Optional.empty(),
-            Optional.empty(),
-            Optional.of(Set.of(CodigoPictogramaSGA.GHS02)),
-            EstadoReglaPerfil.VALIDADO
-    );
+        CriteriosIdentificacionPerfil criterios = crearCriterios(
+                general.id(),
+                sinRestriccionTexto(),
+                sinRestriccionTexto(),
+                pictogramasRequeridos(CodigoPictogramaSGA.GHS02),
+                EstadoReglaPerfil.VALIDADO
+        );
 
-    DatosRelevantesFDS datos = crearDatosFDS(
-            Optional.of(2),
-            Optional.empty(),
-            Optional.empty(),
-            Optional.of(Set.of(CodigoPictogramaSGA.GHS04))
-    );
+        DatosRelevantesFDS datos = crearDatosFDS(
+                Optional.of(2),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.of(Set.of(CodigoPictogramaSGA.GHS04))
+        );
 
-    ResultadoIdentificacionPerfil resultado = matcher.identificar(
-            TipoPerfil.COLUMNA,
-            datos,
-            List.of(general),
-            List.of(criterios)
-    );
+        ResultadoIdentificacionPerfil resultado = matcher.identificar(
+                TipoPerfil.COLUMNA,
+                datos,
+                List.of(general),
+                List.of(criterios)
+        );
 
-    assertEquals(
-            EstadoIdentificacionPerfil.NO_DETERMINADO,
-            resultado.estado()
-    );
-}
+        assertEquals(
+                EstadoIdentificacionPerfil.NO_DETERMINADO,
+                resultado.estado()
+        );
+    }
 
+    @Test
+    void debeCoincidirConCualquieraDeLasDivisionesPermitidas() {
+        PerfilMatriz especifico = crearPerfil(
+                UUID.randomUUID(), "C-GASES",
+                ModoDivision.LISTA_ESPECIFICA, EstadoPerfil.VALIDADO
+        );
+
+        CriteriosIdentificacionPerfil criterios = crearCriterios(
+                especifico.id(),
+                sinRestriccionTexto(),
+                divisionesPermitidas("2.1", "2.2"),
+                sinRestriccionPictogramas(),
+                EstadoReglaPerfil.VALIDADO
+        );
+
+        DatosRelevantesFDS datos = crearDatosFDS(
+                Optional.of(2),
+                Optional.of("2.1"),
+                Optional.empty(),
+                Optional.empty()
+        );
+
+        ResultadoIdentificacionPerfil resultado = matcher.identificar(
+                TipoPerfil.COLUMNA,
+                datos,
+                List.of(especifico),
+                List.of(criterios)
+        );
+
+        assertEquals(
+                EstadoIdentificacionPerfil.IDENTIFICADO,
+                resultado.estado()
+        );
+        assertEquals(especifico, resultado.perfil().orElseThrow());
+    }
 }
