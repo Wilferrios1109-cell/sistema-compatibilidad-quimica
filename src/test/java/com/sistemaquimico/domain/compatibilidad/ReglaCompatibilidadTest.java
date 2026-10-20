@@ -1,10 +1,9 @@
 
 package com.sistemaquimico.domain.compatibilidad;
 
-import com.sistemaquimico.domain.perfil.CodigoPictogramaSGA;
 import org.junit.jupiter.api.Test;
 
-import java.util.Set;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -13,32 +12,45 @@ class ReglaCompatibilidadTest {
 
     @Test
     void debeCrearUnaReglaValida() {
+        UUID fuente = UUID.randomUUID();
+        UUID perfilFila = UUID.randomUUID();
+        UUID perfilColumna = UUID.randomUUID();
+        UUID nota = UUID.randomUUID();
+
+        ReglaCompatibilidad regla = new ReglaCompatibilidad(
+                UUID.randomUUID(),
+                fuente,
+                perfilFila,
+                perfilColumna,
+                ResultadoCompatibilidadMatriz.VERDE,
+                Optional.of(nota)
+        );
+
+        assertEquals(fuente, regla.idFuente());
+        assertEquals(perfilFila, regla.idPerfilFila());
+        assertEquals(perfilColumna, regla.idPerfilColumna());
+        assertEquals(ResultadoCompatibilidadMatriz.VERDE, regla.resultado());
+        assertEquals(Optional.of(nota), regla.idNotaMatriz());
+        assertEquals(
+                new ClaveReglaCompatibilidad(
+                        fuente, perfilFila, perfilColumna
+                ),
+                regla.clave()
+        );
+    }
+
+    @Test
+    void debePermitirUnaReglaSinNota() {
         ReglaCompatibilidad regla = new ReglaCompatibilidad(
                 UUID.randomUUID(),
                 UUID.randomUUID(),
                 UUID.randomUUID(),
-                CodigoPictogramaSGA.GHS02,
-                ResultadoCompatibilidadMatriz.VERDE,
-                Set.of(1, 2)
+                UUID.randomUUID(),
+                ResultadoCompatibilidadMatriz.AMARILLO,
+                Optional.empty()
         );
 
-        assertEquals(CodigoPictogramaSGA.GHS02, regla.pictograma());
-        assertEquals(ResultadoCompatibilidadMatriz.VERDE, regla.resultado());
-        assertEquals(Set.of(1, 2), regla.referenciasNotas());
-    }
-
-    @Test
-    void debeRechazarUnaReferenciaDeNotaNoPositiva() {
-        assertThrows(IllegalArgumentException.class, () ->
-                new ReglaCompatibilidad(
-                        UUID.randomUUID(),
-                        UUID.randomUUID(),
-                        UUID.randomUUID(),
-                        CodigoPictogramaSGA.GHS02,
-                        ResultadoCompatibilidadMatriz.AMARILLO,
-                        Set.of(0)
-                )
-        );
+        assertTrue(regla.idNotaMatriz().isEmpty());
     }
 
     @Test
@@ -48,26 +60,24 @@ class ReglaCompatibilidadTest {
                         UUID.randomUUID(),
                         UUID.randomUUID(),
                         UUID.randomUUID(),
-                        CodigoPictogramaSGA.GHS02,
+                        UUID.randomUUID(),
                         null,
-                        Set.of()
+                        Optional.empty()
                 )
         );
     }
 
-    @Test
-    void noDebePermitirModificarLasReferenciasDeNotas() {
-        ReglaCompatibilidad regla = new ReglaCompatibilidad(
-                UUID.randomUUID(),
-                UUID.randomUUID(),
-                UUID.randomUUID(),
-                CodigoPictogramaSGA.GHS02,
-                ResultadoCompatibilidadMatriz.VERDE,
-                Set.of(1)
-        );
-
-        assertThrows(UnsupportedOperationException.class, () ->
-                regla.referenciasNotas().add(2)
+        @Test
+    void debeRechazarUnaReferenciaDeNotaNula() {
+        assertThrows(NullPointerException.class, () ->
+                new ReglaCompatibilidad(
+                        UUID.randomUUID(),
+                        UUID.randomUUID(),
+                        UUID.randomUUID(),
+                        UUID.randomUUID(),
+                        ResultadoCompatibilidadMatriz.VERDE,
+                        null
+                )
         );
     }
 }

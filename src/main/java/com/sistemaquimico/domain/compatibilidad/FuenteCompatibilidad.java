@@ -1,35 +1,54 @@
 
 package com.sistemaquimico.domain.compatibilidad;
 
+import java.time.LocalDateTime;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 public record FuenteCompatibilidad(
         UUID id,
         String nombre,
         String version,
-        TipoMatrizCompatibilidad tipo,
-        String responsable,
-        boolean activa
+        Optional<LocalDateTime> fechaPublicacion,
+        EstadoFuenteCompatibilidad estado
 ) {
+
     public FuenteCompatibilidad {
-        Objects.requireNonNull(id, "El identificador es obligatorio");
-        Objects.requireNonNull(tipo, "El tipo de matriz es obligatorio");
+        Objects.requireNonNull(
+                id,
+                "El identificador de la fuente es obligatorio"
+        );
+        Objects.requireNonNull(
+                nombre,
+                "El nombre de la fuente es obligatorio"
+        );
+        Objects.requireNonNull(
+                version,
+                "La versión de la fuente es obligatoria"
+        );
+        Objects.requireNonNull(
+                fechaPublicacion,
+                "La fecha de publicación debe indicarse"
+        );
+        Objects.requireNonNull(
+                estado,
+                "El estado de la fuente es obligatorio"
+        );
 
-        nombre = validarTexto(nombre, "El nombre es obligatorio");
-        version = validarTexto(version, "La versión es obligatoria");
-        responsable = validarTexto(responsable, "El responsable es obligatorio");
-    }
+        nombre = nombre.trim();
+        version = version.trim();
 
-    private static String validarTexto(String valor, String mensaje) {
-        Objects.requireNonNull(valor, mensaje);
-
-        String texto = valor.trim();
-
-        if (texto.isEmpty()) {
-            throw new IllegalArgumentException(mensaje);
+        if (nombre.isBlank()) {
+            throw new IllegalArgumentException(
+                    "El nombre de la fuente no puede estar vacío"
+            );
         }
 
-        return texto;
+        if (version.isBlank()) {
+            throw new IllegalArgumentException(
+                    "La versión de la fuente no puede estar vacía"
+            );
+        }
     }
 }

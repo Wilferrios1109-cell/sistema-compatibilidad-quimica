@@ -4,5 +4,5 @@ public enum ResultadoCompatibilidadMatriz {
     VERDE,
     AMARILLO,
     ROJO,
-    NO_DETERMINADO
+    
 }
